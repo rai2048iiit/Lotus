@@ -15,7 +15,12 @@
   [empty-env]
   [extended-env (syms (list-of symbol?))
                 (vals (list-of number?))
-                (outer-env env?)])
+                (outer-env env?)]
+  [extended-fix-env (f-ids (list-of symbol?))
+                    (lf-formals (list-of (list-of symbol?)))
+                    (f-bodies (list-of ast?))
+                    (outer-env env?)]
+  )
 
 (define list-index
   (lambda (l x ind)
@@ -32,7 +37,15 @@
                     (let ([i (list-index syms x 0)])
                       (cond
                         [(= i -1) (lookup-env outer-env x)]
-                        [else (list-ref vals i)]))])))
+                        [else (list-ref vals i)]))]
+      [extended-fix-env (f-ids lf-formals f-bodies outer-env)
+                        (let ([j (list-index f-ids x)])
+                          (cond
+                            [(= j -1) (lookup-env outer-env x)]
+                            [else (let ([formals (list-ref lf-formals j)]
+                                        [body (list-ref f-bodies j)])
+                                    (closure formals body e))]
+                            ))])))
 
 
 (define-datatype bind bind?
@@ -44,6 +57,12 @@
   [closure (formals (list-of symbol?))
            (body ast?)
            (env env?)])
+
+(define-datatype fbind fbind?
+  [make-fbind (f-id symbol?) 
+              (f-formals (list-of symbol?)) 
+              (f-body ast?)])
+
 
 (define-datatype ast ast?
   [num (datum  number?)]
@@ -60,7 +79,10 @@
   [function (formals (list-of symbol?))
             (body ast?)]
   [app (rator ast?) (rands (list-of ast?))]
+  [fix (fbinds (list-of fbind?)) (body ast?)]
   )
+
+
 
 
 
@@ -130,8 +152,16 @@
              (if (proc? p)
                  (apply-proc p args)
                  (eopl:error "Rator must be proc?")))]
-      
-      )))
+      [fix (fbinds body)
+           (let* 
+               ([f-ids (map fbind-id fbinds)]
+                [lf-formals (map fbind-formals fbinds)]
+                [f-bodies (map fbind-body fbinds)]
+                [new-env (extended-fix-env
+               f-ids lf-formals f-bodies env)])
+          (eval-ast body new-env))]                
+                 
+                 )))
 
 (define apply-proc
   (lambda (p args)
@@ -147,7 +177,7 @@
     (let ([return-type (first sig)]
           [arg-types (rest sig)])
       (cond [(and (= (length arg-types) (length args))
-             (andmap (match-arg-type (arg-types args))))
+                  (andmap (match-arg-type (arg-types args))))
              
              (apply prim args)]
             
@@ -161,6 +191,25 @@
   (lambda(formals body env args)
     (let ([new-env (extended-env formals args env)])
       (eval-ast body new-env))))
+
+
+;;; fbind-id : fbind? -> id?
+(define fbind-id
+  (lambda (b)
+    (cases fbind b
+      [make-fbind (fb-id fb-formals fb-body) fb-id])))
+
+;;; fbind-formals : fbind? -> (list-of id?)
+(define fbind-formals
+  (lambda (b)
+    (cases fbind b
+      [make-fbind (fb-id fb-formals fb-body) fb-formals])))
+
+;;; fbind-body : fbind? -> ast?
+(define fbind-body
+  (lambda (b)
+    (cases fbind b
+      [make-fbind (fb-id fb-formals fb-body) fb-body])))
 
 
 ; parse : list? -> ast?

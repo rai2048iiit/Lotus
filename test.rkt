@@ -1,4 +1,5 @@
 #lang racket
+
 (define e1 (extended-env (list 'x) (list 5) (empty-env)))
 
 ; primitive application
